@@ -15,5 +15,6 @@ public class Main {
 	        MasterSystem.start();
 	    else
 	        WorkerSystem.start();
+	    boolean newVar = false;
 	}
 }
