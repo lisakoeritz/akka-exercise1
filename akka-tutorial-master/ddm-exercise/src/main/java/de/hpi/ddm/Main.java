@@ -15,6 +15,5 @@ public class Main {
 	        MasterSystem.start();
 	    else
 	        WorkerSystem.start();
-	Boolean a = true;
 	}
 }
