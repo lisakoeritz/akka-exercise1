@@ -62,7 +62,7 @@ public class LargeMessageProxy extends AbstractLoggingActor {
 				.build();
 	}
 
-	private void handle(LargeMessage<?> largeMessage) {
+	private void handle(LargeMessage<?> largeMessage) { // 7 - handle LargeMessage message from master
 		Object message = largeMessage.getMessage();
 		ActorRef sender = this.sender();
 		ActorRef receiver = largeMessage.getReceiver();
@@ -80,12 +80,15 @@ public class LargeMessageProxy extends AbstractLoggingActor {
 		// - To split an object, serialize it into a byte array and then send the byte array range-by-range (tip: try "KryoPoolSingleton.get()").
 		// - If you serialize a message manually and send it, it will, of course, be serialized again by Akka's message passing subsystem.
 		// - But: Good, language-dependent serializers (such as kryo) are aware of byte arrays so that their serialization is very effective w.r.t. serialization time and size of serialized data.
+
+		//Kryo Serialization
+
 		receiverProxy.tell(new BytesMessage<>(message, sender, receiver), this.self());
 	}
 
 	private void handle(BytesMessage<?> message) {
 		// TODO: With option a): Store the message, ask for the next chunk and, if all chunks are present, reassemble the message's content, deserialize it and pass it to the receiver.
 		// The following code assumes that the transmitted bytes are the original message, which they shouldn't be in your proper implementation ;-)
-		message.getReceiver().tell(message.getBytes(), message.getSender());
+		//message.getReceiver().tell(message.getBytes(), message.getSender());
 	}
 }

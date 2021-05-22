@@ -150,11 +150,13 @@ public class Master extends AbstractLoggingActor {
 	}
 
 	protected void handle(RegistrationMessage message) {
+		// TODO: add poison pill if master ended?
+
 		this.context().watch(this.sender());
 		this.workers.add(this.sender());
 		this.log().info("Registered {}", this.sender());
 		
-		this.largeMessageProxy.tell(new LargeMessageProxy.LargeMessage<>(new Worker.WelcomeMessage(this.welcomeData), this.sender()), this.self());
+		this.largeMessageProxy.tell(new LargeMessageProxy.LargeMessage<>(this.welcomeData, this.sender()), this.self()); // replaced new Worker.WelcomeMessage(this.welcomeData)
 		
 		// TODO: Assign some work to registering workers. Note that the processing of the global task might have already started.
 	}

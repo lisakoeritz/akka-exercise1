@@ -46,7 +46,7 @@ public class MasterSystem {
 		
 		ActorRef master = system.actorOf(Master.props(reader, collector, c.generateWelcomeData()), Master.DEFAULT_NAME);
 		
-		Cluster.get(system).registerOnMemberUp(new Runnable() {
+		Cluster.get(system).registerOnMemberUp(new Runnable() { // 1- start workers
 			@Override
 			public void run() {
 				for (int i = 0; i < c.getNumWorkers(); i++)
@@ -57,7 +57,7 @@ public class MasterSystem {
 			}
 		});
 
-		Cluster.get(system).registerOnMemberRemoved(new Runnable() {
+		Cluster.get(system).registerOnMemberRemoved(new Runnable() { // runnable to terminate workers
 			@Override
 			public void run() {
 				system.terminate();

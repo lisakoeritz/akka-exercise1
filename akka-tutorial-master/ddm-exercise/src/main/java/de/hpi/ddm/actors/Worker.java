@@ -66,7 +66,7 @@ public class Worker extends AbstractLoggingActor {
 	public void preStart() {
 		Reaper.watchWithDefaultReaper(this);
 		
-		this.cluster.subscribe(this.self(), MemberUp.class, MemberRemoved.class);
+		this.cluster.subscribe(this.self(), MemberUp.class, MemberRemoved.class); // 2 - worker subscribes to cluster
 	}
 
 	@Override
@@ -90,16 +90,16 @@ public class Worker extends AbstractLoggingActor {
 				.build();
 	}
 
-	private void handle(CurrentClusterState message) {
+	private void handle(CurrentClusterState message) { // 3 - first message via CurrentClusterState
 		message.getMembers().forEach(member -> {
-			if (member.status().equals(MemberStatus.up()))
-				this.register(member);
+			if (member.status().equals(MemberStatus.up())) //if status up
+				this.register(member); // register function evoked
 		});
 	}
 
 	private void handle(MemberUp message) {
 		this.register(message.member());
-	}
+	} // 4 - handle registration via MemberUp if  current master dead
 
 	private void register(Member member) {
 		if ((this.masterSystem == null) && member.hasRole(MasterSystem.MASTER_ROLE)) {
@@ -107,7 +107,7 @@ public class Worker extends AbstractLoggingActor {
 			
 			this.getContext()
 				.actorSelection(member.address() + "/user/" + Master.DEFAULT_NAME)
-				.tell(new Master.RegistrationMessage(), this.self());
+				.tell(new Master.RegistrationMessage(), this.self()); // 5 - first communication between worker and master
 			
 			this.registrationTime = System.currentTimeMillis();
 		}
