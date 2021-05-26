@@ -154,6 +154,8 @@ public class Master extends AbstractLoggingActor {
 
 		this.context().watch(this.sender());
 		this.workers.add(this.sender());
+
+
 		this.log().info("Registered {}", this.sender());
 		
 		this.largeMessageProxy.tell(new LargeMessageProxy.LargeMessage<>(this.welcomeData, this.sender()), this.self()); // replaced new Worker.WelcomeMessage(this.welcomeData)
