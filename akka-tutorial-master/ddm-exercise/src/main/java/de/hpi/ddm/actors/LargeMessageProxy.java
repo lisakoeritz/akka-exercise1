@@ -172,6 +172,7 @@ public class LargeMessageProxy extends AbstractLoggingActor {
 		// TODO: With option a): Store the message, ask for the next chunk and, if all chunks are present, reassemble the message's content, deserialize it and pass it to the receiver.
 		// The following code assumes that the transmitted bytes are the original message, which they shouldn't be in your proper implementation ;-)
 		//message.getReceiver().tell(message.getBytes(), message.getSender());
+		//this.log().debug(String.valueOf(message));
 		message.getReceiver().tell(KryoPoolSingleton.get().fromBytes(message.getBytes()), message.getSender()); //Deserialization: de-converting bytes
 	}
 

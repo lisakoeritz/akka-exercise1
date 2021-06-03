@@ -144,7 +144,7 @@ public class Worker extends AbstractLoggingActor {
 
 		hashedHintPermutations = new ArrayList<String>();
 		heapPermutation(charCombination,charCombination.length);
-		
+
 		this.master.tell(new HashHintMessage(hintChar, hashedHintPermutations), this.self());
 		this.master.tell(new AvailabilityMessage(), this.self());
 	}
