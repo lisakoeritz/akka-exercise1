@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.List;
 
 import akka.actor.AbstractLoggingActor;
@@ -29,6 +30,7 @@ public class Worker extends AbstractLoggingActor {
 	////////////////////////
 	
 	public static final String DEFAULT_NAME = "worker";
+	private ArrayList hashedHintPermutations;
 
 	public static Props props() {
 		return Props.create(Worker.class);
@@ -51,6 +53,12 @@ public class Worker extends AbstractLoggingActor {
 
 	@AllArgsConstructor
 	public static class AvailabilityMessage implements Serializable{}
+
+	@Data @NoArgsConstructor @AllArgsConstructor
+	public static class HashHintMessage implements Serializable {
+		private char hintChar;
+		private ArrayList<String> hashedPermutations;
+	}
 	
 	/////////////////
 	// Actor State //
@@ -60,6 +68,7 @@ public class Worker extends AbstractLoggingActor {
 	private final Cluster cluster;
 	private final ActorRef largeMessageProxy;
 	private long registrationTime;
+	private ActorRef master;
 	
 	/////////////////////
 	// Actor Lifecycle //
@@ -88,6 +97,7 @@ public class Worker extends AbstractLoggingActor {
 				.match(MemberUp.class, this::handle)
 				.match(MemberRemoved.class, this::handle)
 				.match(WelcomeMessage.class, this::handle)
+				.match(Master.CreateHintUniverseMessage.class, this::handle)
 				// TODO: Add further messages here to share work between Master and Worker actors
 				.matchAny(object -> this.log().info("Received unknown message: \"{}\"", object.toString()))
 				.build();
@@ -125,6 +135,19 @@ public class Worker extends AbstractLoggingActor {
 		final long transmissionTime = System.currentTimeMillis() - this.registrationTime;
 		this.log().info("WelcomeMessage with " + message.getWelcomeData().getSizeInMB() + " MB data received in " + transmissionTime + " ms.");
 	}
+
+	private void handle(Master.CreateHintUniverseMessage message){
+		char hintChar = message.getHintChar();
+		char[] charCombination = message.getPossibleHintCharacters();
+
+		this.log().info("got a Hint Hashing request");
+
+		hashedHintPermutations = new ArrayList<String>();
+		heapPermutation(charCombination,charCombination.length);
+		
+		this.master.tell(new HashHintMessage(hintChar, hashedHintPermutations), this.self());
+		this.master.tell(new AvailabilityMessage(), this.self());
+	}
 	
 	private String hash(String characters) {
 		try {
@@ -145,13 +168,15 @@ public class Worker extends AbstractLoggingActor {
 	// Generating all permutations of an array using Heap's Algorithm
 	// https://en.wikipedia.org/wiki/Heap's_algorithm
 	// https://www.geeksforgeeks.org/heaps-algorithm-for-generating-permutations/
-	private void heapPermutation(char[] a, int size, int n, List<String> l) {
+	private void heapPermutation(char[] a, int size) {
 		// If size is 1, store the obtained permutation
-		if (size == 1)
-			l.add(new String(a));
+		if (size == 1) {
+			String permutationHash = hash(new String(a));
+			hashedHintPermutations.add(permutationHash);
+		}
 
 		for (int i = 0; i < size; i++) {
-			heapPermutation(a, size - 1, n, l);
+			heapPermutation(a, size - 1);
 
 			// If size is odd, swap first and last element
 			if (size % 2 == 1) {

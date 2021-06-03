@@ -1,9 +1,7 @@
 package de.hpi.ddm.actors;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 import akka.actor.AbstractLoggingActor;
 import akka.actor.ActorRef;
@@ -11,9 +9,7 @@ import akka.actor.PoisonPill;
 import akka.actor.Props;
 import akka.actor.Terminated;
 import de.hpi.ddm.structures.BloomFilter;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 public class Master extends AbstractLoggingActor {
 
@@ -34,6 +30,10 @@ public class Master extends AbstractLoggingActor {
 		this.occupiedWorkers = new ArrayList<>();
 		this.largeMessageProxy = this.context().actorOf(LargeMessageProxy.props(), LargeMessageProxy.DEFAULT_NAME);
 		this.welcomeData = welcomeData;
+		this.pwdHashmap = new HashMap<Integer, Password>();
+		this.hashedHintUniverse = new HashMap<>();
+		this.hintUniverseQueue = new LinkedList<CreateHintUniverseMessage>();
+		this.pwdLength = -1;
 	}
 
 	////////////////////
@@ -55,6 +55,12 @@ public class Master extends AbstractLoggingActor {
 	public static class RegistrationMessage implements Serializable {
 		private static final long serialVersionUID = 3303081601659723997L;
 	}
+
+	@Getter @Setter @ToString @AllArgsConstructor @NoArgsConstructor
+	public static class CreateHintUniverseMessage implements Serializable {
+		private char hintChar;
+		private char[] possibleHintCharacters;
+	}
 	
 	/////////////////
 	// Actor State //
@@ -67,6 +73,13 @@ public class Master extends AbstractLoggingActor {
 	private final BloomFilter welcomeData;
 
 	private List<Boolean> occupiedWorkers;
+	private HashMap<Integer, Password> pwdHashmap; //to keep overview of data associated with each ID/password
+	private HashMap<Character, ArrayList<String>> hashedHintUniverse; //for each missing char (from hint) all hashed permutations
+	private Queue<CreateHintUniverseMessage> hintUniverseQueue;
+
+
+	private int pwdLength;
+	private char[] charUniverse;
 
 	private long startTime;
 	
@@ -90,6 +103,8 @@ public class Master extends AbstractLoggingActor {
 				.match(BatchMessage.class, this::handle)
 				.match(Terminated.class, this::handle)
 				.match(RegistrationMessage.class, this::handle)
+				.match(Worker.HashHintMessage.class, this::handle)
+				.match(Worker.AvailabilityMessage.class, this::handle)
 				// TODO: Add further messages here to share work between Master and Worker actors
 				.matchAny(object -> this.log().info("Received unknown message: \"{}\"", object.toString()))
 				.build();
@@ -97,7 +112,6 @@ public class Master extends AbstractLoggingActor {
 
 	protected void handle(StartMessage message) {
 		this.startTime = System.currentTimeMillis();
-		
 		this.reader.tell(new Reader.ReadMessage(), this.self());
 	}
 	
@@ -117,22 +131,55 @@ public class Master extends AbstractLoggingActor {
 		// b) Memory reduction: If the batches are processed sequentially, the memory consumption can be kept constant; if the entire input is read into main memory, the memory consumption scales at least linearly with the input size.
 		// - It is your choice, how and if you want to make use of the batched inputs. Simply aggregate all batches in the Master and start the processing afterwards, if you wish.
 
-		// TODO: Stop fetching lines from the Reader once an empty BatchMessage was received; we have seen all data then
+		//Stop fetching lines from the Reader once an empty BatchMessage was received; we have seen all data then
 		if (message.getLines().isEmpty()) {
+			this.collector.tell(new Collector.PrintMessage(), this.self());
 			this.terminate();
 			return;
 		}
+
+		if(hashedHintUniverse.isEmpty()){
+			this.pwdLength = Integer.parseInt(message.getLines().get(0)[3]);
+			this.charUniverse = message.getLines().get(0)[2].toCharArray();
+
+			for(int index = 0; index < charUniverse.length; index++){
+				char [] charCombination = new char[charUniverse.length - 1];
+				char missingChar = 0;
+				for (int j = 0, k = 0; j < charUniverse.length; j++) {
+					if (j == index) {
+						missingChar = charUniverse[j];
+					} else {
+						charCombination[k++] = charUniverse[j];
+					}
+				}
+				hintUniverseQueue.add(new CreateHintUniverseMessage(missingChar, charCombination));
+				sendCreateHintUniverseMessage();
+			}
+
+		}
+
 		
 		// TODO: Process the lines with the help of the worker actors
-		for (String[] line : message.getLines())
-			this.log().error("Need help processing: {}", Arrays.toString(line));
+		//for (String[] line : message.getLines())
+		//	this.log().error("Need help processing: {}", Arrays.toString(line));
 		
 		// TODO: Send (partial) results to the Collector
-		this.collector.tell(new Collector.CollectMessage("If I had results, this would be one."), this.self());
+		//this.collector.tell(new Collector.CollectMessage("If I had results, this would be one."), this.self());
 		
 		// TODO: Fetch further lines from the Reader
 		this.reader.tell(new Reader.ReadMessage(), this.self());
 		
+	}
+
+	protected void sendCreateHintUniverseMessage() {
+		for (int i = 0; i < occupiedWorkers.size(); i++) {
+			if (!this.occupiedWorkers.get(i)){
+				try {
+					this.workers.get(i).tell(this.hintUniverseQueue.remove(), this.self());
+					this.occupiedWorkers.set(i, true); //occupied
+				}catch (NoSuchElementException e){};
+			}
+		}
 	}
 	
 	protected void terminate() {
@@ -157,6 +204,7 @@ public class Master extends AbstractLoggingActor {
 
 		this.context().watch(this.sender());
 		this.workers.add(this.sender());
+		this.occupiedWorkers.add(false);
 		this.log().info("Registered {}", this.sender());
 		
 		this.largeMessageProxy.tell(new LargeMessageProxy.LargeMessage<>(this.welcomeData, this.sender()), this.self()); // replaced new Worker.WelcomeMessage(this.welcomeData)
@@ -175,10 +223,87 @@ public class Master extends AbstractLoggingActor {
 			}
 		}
 	}
+
+	//get hashed hint permutations for each one combination back
+	private void handle(Worker.HashHintMessage hashHintMessage) {
+		char hintChar = hashHintMessage.getHintChar();
+		this.log().info("Added hashed hintUniverse for hintChar " + hintChar);
+		hashedHintUniverse.put(hintChar, hashHintMessage.getHashedPermutations());
+		System.out.println("following HintUniverse:"+hashHintMessage.getHashedPermutations());
+	}
 	
 	protected void handle(Terminated message) {
 		this.context().unwatch(message.getActor());
 		this.workers.remove(message.getActor());
 		this.log().info("Unregistered {}", message.getActor());
+	}
+
+	@Getter @Setter @ToString @NoArgsConstructor
+	//static & @NoArgsConstructor for serialization with kryo
+	protected static class Password implements Serializable, Cloneable{
+		private int ID;
+		private String name;
+		private int pwdLength;
+		private char[] charUniverse;
+		private String encrPwd;
+		private String decrPwd;
+		private String[] encrHints;
+		private String[] decrHints;
+
+		public Password(int ID, String name, String encryptedPassword, String[] encryptedHints, char[] charUniverse, int pwdLength){
+			this.ID = ID;
+			this.name = name;
+			this.encrPwd = encryptedPassword;
+			this.decrPwd = "";
+			this.encrHints = encryptedHints.clone();
+			this.decrHints = new String[this.encrHints.length];
+			Arrays.fill(this.decrHints, "");
+			this.charUniverse = charUniverse;
+			this.pwdLength = pwdLength;
+		}
+
+		public Object clone(){
+			try {
+				return super.clone();
+			} catch (CloneNotSupportedException e){
+				return this;
+			}
+		}
+
+		public void setDecrHintsOnIndex(int index, String stringValue){
+			decrHints[index] = stringValue;
+		}
+
+		public String setDecrHintsOnIndex(int index){
+			return decrHints[index];
+		}
+
+		public String getEncrHintsOnIndex(int index){
+			return encrHints[index];
+		}
+
+		public int getIndexFromEncrHintsElem(String stringElement){
+			for (int i = 0; i < encrHints.length; i++) {
+				if(stringElement.equals(encrHints[i])){
+					return i;
+				}
+			}
+			return -1;
+		}
+
+		public void addDecrHint(String encrypted, String decrypted){
+			int index = getIndexFromEncrHintsElem(encrypted);
+			setDecrHintsOnIndex(index, decrypted);
+		}
+
+		//check if all hints are not empty
+		public boolean checkAllHintsDecrypted(){
+			for (int i = 0; i < decrHints.length; i++) {
+				if(decrHints[i].equals("")){
+					return false;
+				}
+			}
+			return true;
+		}
 	}
 }
