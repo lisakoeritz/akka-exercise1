@@ -34,6 +34,8 @@ public class Master extends AbstractLoggingActor {
 		this.hashedHintUniverse = new HashMap<>();
 		this.hintUniverseQueue = new LinkedList<CreateHintUniverseMessage>();
 		this.pwdLength = -1;
+
+		this.possiblePermutationsForHintsList = new ArrayList<char[]>();
 	}
 
 	////////////////////
@@ -81,6 +83,8 @@ public class Master extends AbstractLoggingActor {
 	private int pwdLength;
 	private char[] charUniverse;
 
+	private final ArrayList<char[]> possiblePermutationsForHintsList;
+
 	private long startTime;
 	
 	/////////////////////
@@ -100,7 +104,7 @@ public class Master extends AbstractLoggingActor {
 	public Receive createReceive() {
 		return receiveBuilder()
 				.match(StartMessage.class, this::handle)
-				.match(BatchMessage.class, this::handle)
+				.match(BatchMessage.class, this::handle) //TODO: who sends this?
 				.match(Terminated.class, this::handle)
 				.match(RegistrationMessage.class, this::handle)
 				.match(Worker.HashHintMessage.class, this::handle)
@@ -113,6 +117,7 @@ public class Master extends AbstractLoggingActor {
 	protected void handle(StartMessage message) {
 		this.startTime = System.currentTimeMillis();
 		this.reader.tell(new Reader.ReadMessage(), this.self());
+		this.log().info("DEBUG: StartMessage");
 	}
 	
 	protected void handle(BatchMessage message) {
@@ -132,30 +137,43 @@ public class Master extends AbstractLoggingActor {
 		// - It is your choice, how and if you want to make use of the batched inputs. Simply aggregate all batches in the Master and start the processing afterwards, if you wish.
 
 		//Stop fetching lines from the Reader once an empty BatchMessage was received; we have seen all data then
+		this.log().info("DEBUG: Batch Message lines: " + Arrays.toString(message.getLines().get(0)));
 		if (message.getLines().isEmpty()) {
 			this.collector.tell(new Collector.PrintMessage(), this.self());
+			//TODO: it is being terminated here????
+			this.log().info("DEBUG: Empty lines");
 			this.terminate();
 			return;
 		}
 
-		if(hashedHintUniverse.isEmpty()){
+
+
+		if(this.pwdLength == 0){
 			this.pwdLength = Integer.parseInt(message.getLines().get(0)[3]);
 			this.charUniverse = message.getLines().get(0)[2].toCharArray();
+			getCharacterPermutations(this.charUniverse, this.pwdLength, possiblePermutationsForHintsList);
+		}
 
-			for(int index = 0; index < charUniverse.length; index++){
-				char [] charCombination = new char[charUniverse.length - 1];
-				char missingChar = 0;
-				for (int j = 0, k = 0; j < charUniverse.length; j++) {
-					if (j == index) {
-						missingChar = charUniverse[j];
-					} else {
-						charCombination[k++] = charUniverse[j];
-					}
-				}
-				hintUniverseQueue.add(new CreateHintUniverseMessage(missingChar, charCombination));
-				sendCreateHintUniverseMessage();
+
+		String[] hints;
+		for (String[] line : message.getLines()) {
+			//System.out.println(Arrays.toString(messageLine)); //Print message
+			//System.out.println(messageLine[4]);
+			int ID = Integer.parseInt(line[0]);
+			hints = new String[line.length-5];
+			for (int i = 5; i < line.length; i++) {
+				hints[i-5] = line[i];
 			}
-
+			Password password = new Password(ID, line[1], line[4], hints, this.charUniverse, this.pwdLength);
+			//this.log().info("DEBUG: Password: " + password);
+			//System.out.println(password);
+			this.pwdHashmap.put(password.getID(), password); //adding password to hashmap
+			for (int i = 0; i < password.getEncrHints().length; i++) {
+				for (char[] chars : this.possiblePermutationsForHintsList) {
+					//TODO: lisa
+					//this.hintCrackingQueue.add(new DecryptHintMessage(password.getID(), password.getEncrHints()[i], chars));//Add hint cracking task to Queue
+				}
+			}
 		}
 
 		
@@ -167,12 +185,14 @@ public class Master extends AbstractLoggingActor {
 		//this.collector.tell(new Collector.CollectMessage("If I had results, this would be one."), this.self());
 		
 		// TODO: Fetch further lines from the Reader
+		this.log().info("DEBUG: Fetching data");
+
 		this.reader.tell(new Reader.ReadMessage(), this.self());
 		
 	}
 
 	protected void sendCreateHintUniverseMessage() {
-		for (int i = 0; i < occupiedWorkers.size(); i++) {
+		for (int i = 0; i < this.occupiedWorkers.size(); i++) {
 			if (!this.occupiedWorkers.get(i)){
 				try {
 					this.workers.get(i).tell(this.hintUniverseQueue.remove(), this.self());
@@ -236,6 +256,7 @@ public class Master extends AbstractLoggingActor {
 		this.context().unwatch(message.getActor());
 		this.workers.remove(message.getActor());
 		this.log().info("Unregistered {}", message.getActor());
+		this.log().info("DEBUG: Terminated");
 	}
 
 	@Getter @Setter @ToString @NoArgsConstructor
@@ -306,4 +327,26 @@ public class Master extends AbstractLoggingActor {
 			return true;
 		}
 	}
-}
+
+		//Character permutations for hints
+		//https://www.geeksforgeeks.org/print-all-combinations-of-given-length/
+		//https://www.geeksforgeeks.org/heaps-algorithm-for-generating-permutations/
+		private void getCharacterPermutations(char[] possibleCharacters, int passwordLength, List<char[]> dataList) {
+			char[] combination = new char[possibleCharacters.length - 1];
+			for (int i = 0; i < possibleCharacters.length; i++) {
+				int combination_index = 0;
+				for (int j = 0; j < possibleCharacters.length; j++) {
+					if (j != i) {
+						combination[combination_index++] = possibleCharacters[j];
+					}
+				}
+				if (combination.length == passwordLength) {
+					dataList.add(combination.clone());
+				} else {
+					getCharacterPermutations(combination, passwordLength, dataList);
+				}
+			}
+		}
+
+
+	}

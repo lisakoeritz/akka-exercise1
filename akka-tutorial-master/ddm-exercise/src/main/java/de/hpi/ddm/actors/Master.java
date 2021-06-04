@@ -116,6 +116,7 @@ public class Master extends AbstractLoggingActor {
 
 		// TODO: Stop fetching lines from the Reader once an empty BatchMessage was received; we have seen all data then
 		if (message.getLines().isEmpty()) {
+			this.log().info("DEBUG: Shutting down because of empty lines" );
 			this.terminate();
 			return;
 		}
