@@ -19,17 +19,20 @@ public class Master extends AbstractLoggingActor {
 	
 	public static final String DEFAULT_NAME = "master";
 
-	public static Props props(final ActorRef reader, final ActorRef collector, final BloomFilter welcomeData) {
-		return Props.create(Master.class, () -> new Master(reader, collector, welcomeData));
+	//public static Props props(final ActorRef reader, final ActorRef collector, final BloomFilter welcomeData) {
+	public static Props props(final ActorRef reader, final ActorRef collector) {
+		//return Props.create(Master.class, () -> new Master(reader, collector, welcomeData));
+		return Props.create(Master.class, () -> new Master(reader, collector));
 	}
 
-	public Master(final ActorRef reader, final ActorRef collector, final BloomFilter welcomeData) {
+	//public Master(final ActorRef reader, final ActorRef collector, final BloomFilter welcomeData) {
+	public Master(final ActorRef reader, final ActorRef collector) {
 		this.reader = reader;
 		this.collector = collector;
 		this.workers = new ArrayList<>();
 		this.occupiedWorkers = new ArrayList<>();
 		this.largeMessageProxy = this.context().actorOf(LargeMessageProxy.props(), LargeMessageProxy.DEFAULT_NAME);
-		this.welcomeData = welcomeData;
+		//this.welcomeData = welcomeData;
 		this.pwdHashmap = new HashMap<Integer, Password>();
 		this.pwdDecryptionQueue = new LinkedList<SolvePasswordMessage>();
 		this.hintDecryptionQueue = new LinkedList<SolveHintMessage>();
@@ -84,10 +87,11 @@ public class Master extends AbstractLoggingActor {
 	private final ActorRef collector;
 	private final List<ActorRef> workers;
 	private final ActorRef largeMessageProxy;
-	private final BloomFilter welcomeData;
+	//private final BloomFilter welcomeData;
 
 	private List<Boolean> occupiedWorkers;
 	private HashMap<Integer, Password> pwdHashmap; //to keep overview of data associated with each ID/password
+	//private HashMap<Character, ArrayList<String>> hashedHintUniverse; //for each missing char (from hint) all hashed permutations
 	private Queue<SolveHintMessage> hintDecryptionQueue;
 	private Queue<SolvePasswordMessage> pwdDecryptionQueue;
 
