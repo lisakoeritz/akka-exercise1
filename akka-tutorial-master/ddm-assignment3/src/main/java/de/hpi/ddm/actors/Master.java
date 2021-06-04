@@ -261,12 +261,11 @@ public class Master extends AbstractLoggingActor {
 
 		//check if all hints from ID are cracked
 		if(this.pwdHashmap.get(ID).checkAllHintsDecrypted()){
-			//send decrypt password message to worker!
 			Password password = (Password) pwdHashmap.get(ID).clone(); //clone the password from hashmap to send to the worker
 			this.pwdDecryptionQueue.add(new SolvePasswordMessage(password));
-			this.log().info("Added Password Cracking work for ID" + ID + " with Password object: " + this.pwdHashmap.get(ID).toString());
-			this.log().info("PasswordCrackingQueue size: " + this.pwdDecryptionQueue.size());
-			sendSolvePasswordMessage(); //12. send password cracking
+			this.log().info("Password Task for ID added: " + ID + " with Password object: " + this.pwdHashmap.get(ID).toString());
+			this.log().info("pwdDecryptionQueue size: " + this.pwdDecryptionQueue.size());
+			sendSolvePasswordMessage();
 		}
 		sendSolveHintMessage();
 

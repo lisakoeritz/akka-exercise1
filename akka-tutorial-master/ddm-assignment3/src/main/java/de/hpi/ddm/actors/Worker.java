@@ -22,7 +22,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import akka.cluster.Member;
 import akka.cluster.MemberStatus;
-import org.apache.commons.lang3.StringUtils;
 
 public class Worker extends AbstractLoggingActor {
 
@@ -31,7 +30,7 @@ public class Worker extends AbstractLoggingActor {
 	////////////////////////
 	
 	public static final String DEFAULT_NAME = "worker";
-	private String decryptedPassword;
+	private String decryptedPwd;
 
 	public static Props props() {
 		return Props.create(Worker.class);
@@ -40,7 +39,7 @@ public class Worker extends AbstractLoggingActor {
 	public Worker() {
 		this.cluster = Cluster.get(this.context().system());
 		this.largeMessageProxy = this.context().actorOf(LargeMessageProxy.props(), LargeMessageProxy.DEFAULT_NAME);
-		this.decryptedPassword = "";
+		this.decryptedPwd = "";
 	}
 	
 	////////////////////
@@ -167,30 +166,28 @@ public class Worker extends AbstractLoggingActor {
 		this.master.tell(new AvailabilityMessage(), this.self()); //tell master it is free
 	}
 
-	private void handle(Master.SolvePasswordMessage message) { //13. Here worker receives a password to crack
-		//see how to get characters from the hints!
-		//Master should send all hints (so the password object) through here so the worker can work on the password
-		this.ID = message.getPassword().getID(); //Fields are obtained in this way
+	private void handle(Master.SolvePasswordMessage message) {
+		this.ID = message.getPassword().getID();
 		int pwdLength = message.getPassword().getPwdLength();
 
-		String encrypted = message.getPassword().getEncrPwd(); //This we should change
-		//System.out.println("encryptedPassword: " + encrypted);
+		String encrypted = message.getPassword().getEncrPwd();
 
 
 		String[] hints = message.getPassword().getDecrHints().clone();
 		char[] alphabet = message.getPassword().getCharUniverse().clone();
 
 
-		//char[] set = getMissingCharactersofHint(hints, alphabet);
-		//int n = set.length;
+		char[] set = getHintChars(hints, alphabet);
+		int n = set.length;
 
-		//printAllKLengthRec(set, "", n,pwdLength,encrypted);
-		if(!this.decryptedPassword.equals("")) {
-			this.master.tell(new PasswordDecryptedMessage(this.ID, encrypted, this.decryptedPassword), this.self());
+		getAllHintPermutations(set, "", n,pwdLength,encrypted);
+		if(!this.decryptedPwd.equals("")) {
+			this.log().info("Password found");
+			this.master.tell(new PasswordDecryptedMessage(this.ID, encrypted, this.decryptedPwd), this.self());
 			return;
 		}
 		this.log().info("No password found");
-		this.master.tell(new PasswordDecryptedMessage(this.ID, encrypted, this.decryptedPassword), this.self());
+		this.master.tell(new PasswordDecryptedMessage(this.ID, encrypted, this.decryptedPwd), this.self());
 	}
 	
 	private String hash(String characters) {
@@ -241,4 +238,77 @@ public class Worker extends AbstractLoggingActor {
 			}
 		}
 	}
+
+
+
+
+
+
+	private char[] getHintChars (String[] hintsArray, char[] charUniverse){
+
+		List<Character> alphabet = new ArrayList<Character>();
+		for (char c : charUniverse) {
+			alphabet.add(c);
+		}
+
+
+		for (String hint : hintsArray) {
+			List<Character> tempAlphabet =  new ArrayList<Character>();
+			for (int i = 0; i < hint.length(); i++) {
+				char hintChar = hint.charAt(i);
+				for (int k = 0; k < alphabet.size(); k++) {
+					if(alphabet.get(k) == hintChar) {
+						if(alphabet.contains(hintChar)) {
+							tempAlphabet.add(hintChar);
+						}
+					}
+				}
+			}
+			alphabet = tempAlphabet;
+		}
+
+		String returnstring = "";
+		for (Character character : alphabet) {
+			//System.out.println(alphabet.get(j));
+			returnstring = returnstring + character;
+		}
+		//System.out.println(returnstring);
+		return returnstring.toCharArray();
+
+	}
+
+
+
+
+
+
+	// https://www.geeksforgeeks.org/print-all-combinations-of-given-length/
+	void getAllHintPermutations(char[] set, String prefix, int n, int k, String encrypted)
+	{
+		String password = encrypted;
+		// Base case: k is 0,
+		// print prefix
+		if (k == 0)
+		{
+			String curr_hashed = hash(prefix);
+			if (curr_hashed.equals(password)){
+				this.decryptedPwd = prefix;
+				this.log().info("Found password for ID  " + this.ID + ": " + this.decryptedPwd);
+			}
+			return;
+		}
+		// One by one add all characters
+		// from set and recursively
+		// call for k equals to k-1
+		for (int i = 0; i < n; ++i)
+		{
+			// Next character of input added
+			String newPrefix = prefix + set[i];
+			// k is decreased, because
+			// we have added a new character
+			getAllHintPermutations(set, newPrefix, n, k - 1, encrypted);
+		}
+	}
+
+
 }
