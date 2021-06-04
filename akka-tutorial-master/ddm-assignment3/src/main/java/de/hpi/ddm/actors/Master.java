@@ -44,7 +44,7 @@ public class Master extends AbstractLoggingActor {
 	// Actor Messages //
 	////////////////////
 
-	@Data
+	@Data @NoArgsConstructor
 	public static class StartMessage implements Serializable {
 		private static final long serialVersionUID = -50374816448627600L;
 	}
@@ -55,7 +55,7 @@ public class Master extends AbstractLoggingActor {
 		private List<String[]> lines;
 	}
 
-	@Data
+	@Data @NoArgsConstructor
 	public static class RegistrationMessage implements Serializable {
 		private static final long serialVersionUID = 3303081601659723997L;
 	}
@@ -120,12 +120,12 @@ public class Master extends AbstractLoggingActor {
 	public Receive createReceive() {
 		return receiveBuilder()
 				.match(StartMessage.class, this::handle)
-				.match(BatchMessage.class, this::handle) //TODO: who sends this?
-				.match(Terminated.class, this::handle)
+				.match(BatchMessage.class, this::handle)
 				.match(RegistrationMessage.class, this::handle)
 				.match(Worker.HintSolvedMessage.class, this::handle)
 				.match(Worker.PasswordDecryptedMessage.class, this::handle)
 				.match(Worker.AvailabilityMessage.class, this::handle)
+				.match(Terminated.class, this::handle)
 				// TODO: Add further messages here to share work between Master and Worker actors
 				.matchAny(object -> this.log().info("Received unknown message: \"{}\"", object.toString()))
 				.build();
@@ -186,7 +186,6 @@ public class Master extends AbstractLoggingActor {
 			this.pwdHashmap.put(ID, password); //adding password to hashmap
 			for (int i = 0; i < password.getEncrHints().length; i++) {
 				for (char[] chars : this.possiblePermutationsForHintsList) {
-					//TODO: lisa
 					this.hintDecryptionQueue.add(new SolveHintMessage(ID, password.getEncrHints()[i], chars));
 				}
 			}
@@ -201,7 +200,10 @@ public class Master extends AbstractLoggingActor {
 		
 		// TODO: Send (partial) results to the Collector
 		//this.collector.tell(new Collector.CollectMessage("If I had results, this would be one."), this.self());
-		
+
+		this.collector.tell(new Collector.CollectMessage("Processed batch size " + message.getLines().size()), this.self());
+		this.collector.tell(new Collector.PrintMessage(), this.self());
+
 		// TODO: Fetch further lines from the Reader
 		this.log().info("DEBUG: Fetching data");
 
@@ -213,7 +215,8 @@ public class Master extends AbstractLoggingActor {
 		for (int i = 0; i < this.occupiedWorkers.size(); i++) {
 			if (!this.occupiedWorkers.get(i)){
 				try {
-					this.workers.get(i).tell(this.hintDecryptionQueue.remove(), this.self());
+					SolveHintMessage solveHintMessage = this.hintDecryptionQueue.remove();
+					this.workers.get(i).tell(solveHintMessage, this.self());
 					this.occupiedWorkers.set(i, true); //occupied
 				}catch (NoSuchElementException ignored){};
 			}
@@ -264,8 +267,6 @@ public class Master extends AbstractLoggingActor {
 	}
 	
 	protected void terminate() {
-		this.collector.tell(new Collector.PrintMessage(), this.self());
-		
 		this.reader.tell(PoisonPill.getInstance(), ActorRef.noSender());
 		this.collector.tell(PoisonPill.getInstance(), ActorRef.noSender());
 		
