@@ -22,6 +22,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import akka.cluster.Member;
 import akka.cluster.MemberStatus;
+import org.apache.commons.lang3.StringUtils;
 
 public class Worker extends AbstractLoggingActor {
 
@@ -30,7 +31,7 @@ public class Worker extends AbstractLoggingActor {
 	////////////////////////
 	
 	public static final String DEFAULT_NAME = "worker";
-	private ArrayList hashedHintPermutations;
+	private String decryptedPassword;
 
 	public static Props props() {
 		return Props.create(Worker.class);
@@ -39,6 +40,7 @@ public class Worker extends AbstractLoggingActor {
 	public Worker() {
 		this.cluster = Cluster.get(this.context().system());
 		this.largeMessageProxy = this.context().actorOf(LargeMessageProxy.props(), LargeMessageProxy.DEFAULT_NAME);
+		this.decryptedPassword = "";
 	}
 	
 	////////////////////
@@ -51,14 +53,24 @@ public class Worker extends AbstractLoggingActor {
 		private BloomFilter welcomeData;
 	}
 
+	@Data
+	@AllArgsConstructor @NoArgsConstructor
+	public static class HintSolvedMessage implements Serializable {
+		private int ID;
+		private String encryptedHint;
+		private String decryptedHint;
+	}
+
+	@Data
+	@AllArgsConstructor @NoArgsConstructor
+	public static class PasswordDecryptedMessage implements Serializable {
+		private int ID;
+		private String encryptedPassword;
+		private String decryptedPassword;
+	}
+
 	@AllArgsConstructor
 	public static class AvailabilityMessage implements Serializable{}
-
-	@Data @NoArgsConstructor @AllArgsConstructor
-	public static class HashHintMessage implements Serializable {
-		private char hintChar;
-		private ArrayList<String> hashedPermutations;
-	}
 	
 	/////////////////
 	// Actor State //
@@ -69,6 +81,8 @@ public class Worker extends AbstractLoggingActor {
 	private final ActorRef largeMessageProxy;
 	private long registrationTime;
 	private ActorRef master;
+	private String hint;
+	private int ID;
 	
 	/////////////////////
 	// Actor Lifecycle //
@@ -97,7 +111,8 @@ public class Worker extends AbstractLoggingActor {
 				.match(MemberUp.class, this::handle)
 				.match(MemberRemoved.class, this::handle)
 				.match(WelcomeMessage.class, this::handle)
-				.match(Master.CreateHintUniverseMessage.class, this::handle)
+				.match(Master.SolveHintMessage.class, this::handle)
+				.match(Master.SolvePasswordMessage.class, this::handle)
 				// TODO: Add further messages here to share work between Master and Worker actors
 				.matchAny(object -> this.log().info("Received unknown message: \"{}\"", object.toString()))
 				.build();
@@ -136,17 +151,46 @@ public class Worker extends AbstractLoggingActor {
 		this.log().info("WelcomeMessage with " + message.getWelcomeData().getSizeInMB() + " MB data received in " + transmissionTime + " ms.");
 	}
 
-	private void handle(Master.CreateHintUniverseMessage message){
-		char hintChar = message.getHintChar();
-		char[] charCombination = message.getPossibleHintCharacters();
+	private void handle(Master.SolveHintMessage message){
+		this.master = this.sender();
+		this.ID = message.getID();
+		this.hint = message.getHint();
 
-		this.log().info("got a Hint Hashing request");
+		this.log().info("Started decrypting hint");
 
-		hashedHintPermutations = new ArrayList<String>();
-		heapPermutation(charCombination,charCombination.length);
+		//System.out.println(this.hint);
 
-		this.master.tell(new HashHintMessage(hintChar, hashedHintPermutations), this.self());
-		this.master.tell(new AvailabilityMessage(), this.self());
+		//List<String> allPermutations = new ArrayList<>(); //Not needed unless we want to see permutations checked
+		heapPermutation(message.getHintCharCombination(), message.getHintCharCombination().length);
+		//this.log().info("Size of permutations tried: " + allPermutations.size());
+
+		this.master.tell(new AvailabilityMessage(), this.self()); //tell master it is free
+	}
+
+	private void handle(Master.SolvePasswordMessage message) { //13. Here worker receives a password to crack
+		//see how to get characters from the hints!
+		//Master should send all hints (so the password object) through here so the worker can work on the password
+		this.ID = message.getPassword().getID(); //Fields are obtained in this way
+		int pwdLength = message.getPassword().getPwdLength();
+
+		String encrypted = message.getPassword().getEncrPwd(); //This we should change
+		//System.out.println("encryptedPassword: " + encrypted);
+
+
+		String[] hints = message.getPassword().getDecrHints().clone();
+		char[] alphabet = message.getPassword().getCharUniverse().clone();
+
+
+		//char[] set = getMissingCharactersofHint(hints, alphabet);
+		//int n = set.length;
+
+		//printAllKLengthRec(set, "", n,pwdLength,encrypted);
+		if(!this.decryptedPassword.equals("")) {
+			this.master.tell(new PasswordDecryptedMessage(this.ID, encrypted, this.decryptedPassword), this.self());
+			return;
+		}
+		this.log().info("No password found");
+		this.master.tell(new PasswordDecryptedMessage(this.ID, encrypted, this.decryptedPassword), this.self());
 	}
 	
 	private String hash(String characters) {
@@ -172,7 +216,11 @@ public class Worker extends AbstractLoggingActor {
 		// If size is 1, store the obtained permutation
 		if (size == 1) {
 			String permutationHash = hash(new String(a));
-			hashedHintPermutations.add(permutationHash);
+			if(this.hint.equals(permutationHash)){
+				this.log().info("Hint decrypted");
+				this.master.tell(new HintSolvedMessage(this.ID, this.hint, new String(a)), this.self());
+				return;
+			}
 		}
 
 		for (int i = 0; i < size; i++) {
