@@ -19,20 +19,17 @@ public class Master extends AbstractLoggingActor {
 	
 	public static final String DEFAULT_NAME = "master";
 
-	//public static Props props(final ActorRef reader, final ActorRef collector, final BloomFilter welcomeData) {
-	public static Props props(final ActorRef reader, final ActorRef collector) {
-		//return Props.create(Master.class, () -> new Master(reader, collector, welcomeData));
-		return Props.create(Master.class, () -> new Master(reader, collector));
+	public static Props props(final ActorRef reader, final ActorRef collector, final BloomFilter welcomeData) {
+		return Props.create(Master.class, () -> new Master(reader, collector, welcomeData));
 	}
 
-	//public Master(final ActorRef reader, final ActorRef collector, final BloomFilter welcomeData) {
-	public Master(final ActorRef reader, final ActorRef collector) {
+	public Master(final ActorRef reader, final ActorRef collector, final BloomFilter welcomeData) {
 		this.reader = reader;
 		this.collector = collector;
 		this.workers = new ArrayList<>();
 		this.occupiedWorkers = new ArrayList<>();
 		this.largeMessageProxy = this.context().actorOf(LargeMessageProxy.props(), LargeMessageProxy.DEFAULT_NAME);
-		//this.welcomeData = welcomeData;
+		this.welcomeData = welcomeData;
 		this.pwdHashmap = new HashMap<Integer, Password>();
 		this.pwdDecryptionQueue = new LinkedList<SolvePasswordMessage>();
 		this.hintDecryptionQueue = new LinkedList<SolveHintMessage>();
@@ -87,7 +84,7 @@ public class Master extends AbstractLoggingActor {
 	private final ActorRef collector;
 	private final List<ActorRef> workers;
 	private final ActorRef largeMessageProxy;
-	//private final BloomFilter welcomeData;
+	private final BloomFilter welcomeData;
 
 	private List<Boolean> occupiedWorkers;
 	private HashMap<Integer, Password> pwdHashmap; //to keep overview of data associated with each ID/password
@@ -134,7 +131,7 @@ public class Master extends AbstractLoggingActor {
 	protected void handle(StartMessage message) {
 		this.startTime = System.currentTimeMillis();
 		this.reader.tell(new Reader.ReadMessage(), this.self());
-		this.log().info("DEBUG: StartMessage");
+		//this.log().info("DEBUG: StartMessage");
 	}
 	
 	protected void handle(BatchMessage message) {
@@ -156,11 +153,11 @@ public class Master extends AbstractLoggingActor {
 		//Stop fetching lines from the Reader once an empty BatchMessage was received; we have seen all data then
 		if (message.getLines().isEmpty()) {
 			this.collector.tell(new Collector.PrintMessage(), this.self());
-			this.log().info("DEBUG: Empty lines");
+			//this.log().info("DEBUG: Empty lines");
 			this.terminate();
 			return;
 		} else{
-			this.log().info("DEBUG: Batch Message lines: " + Arrays.toString(message.getLines().get(0)));
+			//this.log().info("DEBUG: Batch Message lines: " + Arrays.toString(message.getLines().get(0)));
 		}
 
 
@@ -173,7 +170,7 @@ public class Master extends AbstractLoggingActor {
 
 		String[] hints;
 		for (String[] line : message.getLines()) {
-			System.out.println(Arrays.toString(line)); //Print message
+			//System.out.println(Arrays.toString(line)); //Print message
 			//System.out.println(line[4]);
 			int ID = Integer.parseInt(line[0]);
 			hints = new String[line.length-5];
@@ -181,7 +178,7 @@ public class Master extends AbstractLoggingActor {
 				hints[i-5] = line[i];
 			}
 			Password password = new Password(ID, line[1], line[4], hints, this.charUniverse, this.pwdLength);
-			this.log().info("DEBUG: Password: " + password);
+			//this.log().info("DEBUG: Password: " + password);
 			//System.out.println(password);
 			this.pwdHashmap.put(ID, password); //adding password to hashmap
 			for (int i = 0; i < password.getEncrHints().length; i++) {
@@ -249,9 +246,9 @@ public class Master extends AbstractLoggingActor {
 		for (int i = 0; i < workers.size(); i++) {
 			if(messageSender.equals(workers.get(i))){
 				if(this.pwdHashmap.containsKey(ID)){
-					this.log().info("Added hint to hashmap with key " + ID);
+					//this.log().info("Added hint to hashmap with key " + ID);
 					this.pwdHashmap.get(ID).addDecrHint(hintMessage.getEncryptedHint(), hintMessage.getDecryptedHint());
-					this.log().info("Password object: " + this.pwdHashmap.get(ID).toString());
+					//this.log().info("Password object: " + this.pwdHashmap.get(ID).toString());
 					//this.log().info("Saved hint for " + this.ID_PasswordHashMap.get(ID).getName() + " with ID: " + this.ID_PasswordHashMap.get(ID).getID() + "\n" + "		Hints Array: " + this.ID_PasswordHashMap.get(ID).getDecryptedPassword().toString());
 					break;
 				}
@@ -260,7 +257,7 @@ public class Master extends AbstractLoggingActor {
 		}
 
 		//check if all hints from ID are cracked
-		if(this.pwdHashmap.get(ID).checkAllHintsDecrypted()){
+		if(this.pwdHashmap.get(ID).checkAllHintsDecrypted()==true){
 			Password password = (Password) pwdHashmap.get(ID).clone(); //clone the password from hashmap to send to the worker
 			this.pwdDecryptionQueue.add(new SolvePasswordMessage(password));
 			this.log().info("Password Task for ID added: " + ID + " with Password object: " + this.pwdHashmap.get(ID).toString());
@@ -284,7 +281,7 @@ public class Master extends AbstractLoggingActor {
 				if(this.pwdHashmap.containsKey(id)){
 					if(!decryptedPassword.equals("")){
 						pwdHashmap.get(id).setDecrPwd(decryptedPassword);
-						this.log().info("Decrypted Password from " + pwdHashmap.get(id).getName() + " with ID " + pwdHashmap.get(id).getID() + ": " + decryptedPassword);
+						//this.log().info("Decrypted Password from " + pwdHashmap.get(id).getName() + " with ID " + pwdHashmap.get(id).getID() + ": " + decryptedPassword);
 						//Send solution to the collector
 						this.collector.tell(new Collector.CollectMessage("Decrypted Password from " + pwdHashmap.get(id).getName() + " with ID " + pwdHashmap.get(id).getID() + ": " + decryptedPassword), this.self());
 						this.collector.tell(new Collector.PrintMessage(), this.self());
@@ -351,7 +348,7 @@ public class Master extends AbstractLoggingActor {
 		this.context().unwatch(message.getActor());
 		this.workers.remove(message.getActor());
 		this.log().info("Unregistered {}", message.getActor());
-		this.log().info("DEBUG: Terminated");
+		//this.log().info("DEBUG: Terminated");
 	}
 
 	@Getter @Setter @ToString @NoArgsConstructor
@@ -387,20 +384,20 @@ public class Master extends AbstractLoggingActor {
 		}
 
 		public void setDecrHintsOnIndex(int index, String stringValue){
-			decrHints[index] = stringValue;
+			this.decrHints[index] = stringValue;
 		}
 
 		public String setDecrHintsOnIndex(int index){
-			return decrHints[index];
+			return this.decrHints[index];
 		}
 
 		public String getEncrHintsOnIndex(int index){
-			return encrHints[index];
+			return this.encrHints[index];
 		}
 
 		public int getIndexFromEncrHintsElem(String stringElement){
-			for (int i = 0; i < encrHints.length; i++) {
-				if(stringElement.equals(encrHints[i])){
+			for (int i = 0; i < this.encrHints.length; i++) {
+				if(stringElement.equals(this.encrHints[i])){
 					return i;
 				}
 			}
@@ -414,8 +411,8 @@ public class Master extends AbstractLoggingActor {
 
 		//check if all hints are not empty
 		public boolean checkAllHintsDecrypted(){
-			for (int i = 0; i < decrHints.length; i++) {
-				if(decrHints[i].equals("")){
+			for (int i = 0; i < this.decrHints.length; i++) {
+				if(this.decrHints[i].equals("")){
 					return false;
 				}
 			}

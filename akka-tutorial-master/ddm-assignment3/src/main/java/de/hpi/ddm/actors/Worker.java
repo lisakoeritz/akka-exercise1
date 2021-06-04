@@ -155,7 +155,7 @@ public class Worker extends AbstractLoggingActor {
 		this.ID = message.getID();
 		this.hint = message.getHint();
 
-		this.log().info("Started decrypting hint");
+		//this.log().info("Started decrypting hint");
 
 		//System.out.println(this.hint);
 
@@ -182,11 +182,11 @@ public class Worker extends AbstractLoggingActor {
 
 		getAllHintPermutations(set, "", n,pwdLength,encrypted);
 		if(!this.decryptedPwd.equals("")) {
-			this.log().info("Password found");
+			//this.log().info("Password found");
 			this.master.tell(new PasswordDecryptedMessage(this.ID, encrypted, this.decryptedPwd), this.self());
 			return;
 		}
-		this.log().info("No password found");
+		//this.log().info("No password found");
 		this.master.tell(new PasswordDecryptedMessage(this.ID, encrypted, this.decryptedPwd), this.self());
 	}
 	
@@ -214,7 +214,7 @@ public class Worker extends AbstractLoggingActor {
 		if (size == 1) {
 			String permutationHash = hash(new String(a));
 			if(this.hint.equals(permutationHash)){
-				this.log().info("Hint decrypted");
+				//this.log().info("Hint decrypted");
 				this.master.tell(new HintSolvedMessage(this.ID, this.hint, new String(a)), this.self());
 				return;
 			}
@@ -239,25 +239,18 @@ public class Worker extends AbstractLoggingActor {
 		}
 	}
 
-
-
-
-
-
-	private char[] getHintChars (String[] hintsArray, char[] charUniverse){
-
+	private char[] getHintChars (String[] passwordHints, char[] alphabetArray){
 		List<Character> alphabet = new ArrayList<Character>();
-		for (char c : charUniverse) {
+		for (char c : alphabetArray) {
 			alphabet.add(c);
 		}
-
-
-		for (String hint : hintsArray) {
+		for (String hint : passwordHints) {
 			List<Character> tempAlphabet =  new ArrayList<Character>();
 			for (int i = 0; i < hint.length(); i++) {
 				char hintChar = hint.charAt(i);
 				for (int k = 0; k < alphabet.size(); k++) {
-					if(alphabet.get(k) == hintChar) {
+					char alphabetChar = alphabet.get(k);
+					if(alphabetChar == hintChar) {
 						if(alphabet.contains(hintChar)) {
 							tempAlphabet.add(hintChar);
 						}
@@ -266,18 +259,12 @@ public class Worker extends AbstractLoggingActor {
 			}
 			alphabet = tempAlphabet;
 		}
-
-		String returnstring = "";
+		StringBuilder returnString = new StringBuilder();
 		for (Character character : alphabet) {
-			//System.out.println(alphabet.get(j));
-			returnstring = returnstring + character;
+			returnString.append(character);
 		}
-		//System.out.println(returnstring);
-		return returnstring.toCharArray();
-
+		return returnString.toString().toCharArray();
 	}
-
-
 
 
 
@@ -285,13 +272,12 @@ public class Worker extends AbstractLoggingActor {
 	// https://www.geeksforgeeks.org/print-all-combinations-of-given-length/
 	void getAllHintPermutations(char[] set, String prefix, int n, int k, String encrypted)
 	{
-		String password = encrypted;
 		// Base case: k is 0,
 		// print prefix
 		if (k == 0)
 		{
 			String curr_hashed = hash(prefix);
-			if (curr_hashed.equals(password)){
+			if (curr_hashed.equals(encrypted)){
 				this.decryptedPwd = prefix;
 				this.log().info("Found password for ID  " + this.ID + ": " + this.decryptedPwd);
 			}
