@@ -327,7 +327,7 @@ public class Master extends AbstractLoggingActor {
 		this.occupiedWorkers.add(false);
 		this.log().info("Registered {}", this.sender());
 
-		this.largeMessageProxy.tell(new LargeMessageProxy.LargeMessage<>(new Worker.WelcomeMessage(this.welcomeData), this.sender()), this.self());
+		//this.largeMessageProxy.tell(new LargeMessageProxy.LargeMessage<>(new Worker.WelcomeMessage(this.welcomeData), this.sender()), this.self());
 		// TODO: Assign some work to registering workers. Note that the processing of the global task might have already started.
 	}
 
