@@ -228,7 +228,7 @@ public class Master extends AbstractLoggingActor {
 		for (int i = 0; i < occupiedWorkers.size(); i++) {
 			if (!this.occupiedWorkers.get(i)){
 				try {
-					SolvePasswordMessage messageToSend = this.pwdDecryptionQueue.remove(); //.poll para ver si tiene elemento primero
+					SolvePasswordMessage messageToSend = this.pwdDecryptionQueue.remove();
 					this.workers.get(i).tell(messageToSend, this.self());
 					this.occupiedWorkers.set(i, true); //Set occupied
 					this.log().info("Password message sent to worker");
@@ -326,9 +326,8 @@ public class Master extends AbstractLoggingActor {
 		this.workers.add(this.sender());
 		this.occupiedWorkers.add(false);
 		this.log().info("Registered {}", this.sender());
-		
-		//this.largeMessageProxy.tell(new LargeMessageProxy.LargeMessage<>(this.welcomeData, this.sender()), this.self()); // replaced new Worker.WelcomeMessage(this.welcomeData)
-		
+
+		this.largeMessageProxy.tell(new LargeMessageProxy.LargeMessage<>(new Worker.WelcomeMessage(this.welcomeData), this.sender()), this.self());
 		// TODO: Assign some work to registering workers. Note that the processing of the global task might have already started.
 	}
 

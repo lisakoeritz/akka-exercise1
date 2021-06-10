@@ -143,10 +143,9 @@ public class LargeMessageProxy extends AbstractLoggingActor {
 
 
 	private void handle(LargeMessage<?> largeMessage) { // 7 - handle LargeMessage message from master
-		Object message = largeMessage.getMessage();
 		ActorRef sender = this.sender();
-		ActorRef receiver = largeMessage.getReceiver();
-		ActorSelection receiverProxy = this.context().actorSelection(receiver.path().child(DEFAULT_NAME));
+		this.receiverWorkerReference = largeMessage.getReceiver();
+		ActorSelection receiverProxy = this.context().actorSelection(this.receiverWorkerReference.path().child(DEFAULT_NAME));
 
 		// TODO: Implement a protocol that transmits the potentially very large message object.
 		// The following code sends the entire message wrapped in a BytesMessage, which will definitely fail in a distributed setting if the message is large!
@@ -164,14 +163,16 @@ public class LargeMessageProxy extends AbstractLoggingActor {
 		//Kryo Serialization
 		//Official Streaming documentation: https://doc.akka.io/docs/akka/2.6.14/stream/stream-quickstart.html
 
+		Object message = largeMessage.getMessage();
 		this.entireMessage = KryoPoolSingleton.get().toBytesWithClass(message); //Serialization: converting data into bytes and saving to array
-		receiverProxy.tell(new BytesMessage<>(this.entireMessage, sender, receiver), this.self());
+		receiverProxy.tell(new MasterOnInitializeMessage(this.sender(), this.self(), this.receiverWorkerReference), this.self());
 	}
 
 	private void handle(BytesMessage<byte[]> message) {
 		// TODO: With option a): Store the message, ask for the next chunk and, if all chunks are present, reassemble the message's content, deserialize it and pass it to the receiver.
 		// The following code assumes that the transmitted bytes are the original message, which they shouldn't be in your proper implementation ;-)
 		//message.getReceiver().tell(message.getBytes(), message.getSender());
+		//this.log().debug(String.valueOf(message));
 		message.getReceiver().tell(KryoPoolSingleton.get().fromBytes(message.getBytes()), message.getSender()); //Deserialization: de-converting bytes
 	}
 
@@ -193,6 +194,7 @@ public class LargeMessageProxy extends AbstractLoggingActor {
 
 	//https://doc.akka.io/docs/akka/current/stream/operators/ActorSource/actorRefWithBackpressure.html
 	private void handle(StreamSyncMessage streamSyncMessage) {
+		this.log().info("DEBUG: StreamSyncMessage ");
 		BatchCreator batchCreator = new BatchCreator();
 		Sink sink = Sink.actorRefWithBackpressure(
 				streamSyncMessage.getSenderReference(),

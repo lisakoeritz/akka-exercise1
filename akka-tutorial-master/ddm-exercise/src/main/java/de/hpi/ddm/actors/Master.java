@@ -116,17 +116,17 @@ public class Master extends AbstractLoggingActor {
 
 		// TODO: Stop fetching lines from the Reader once an empty BatchMessage was received; we have seen all data then
 		if (message.getLines().isEmpty()) {
-			this.log().info("DEBUG: Shutting down because of empty lines" );
+			//this.log().info("DEBUG: Shutting down because of empty lines" );
 			this.terminate();
 			return;
 		}
 		
 		// TODO: Process the lines with the help of the worker actors
-		for (String[] line : message.getLines())
-			this.log().error("Need help processing: {}", Arrays.toString(line));
+		//for (String[] line : message.getLines())
+			//this.log().error("Need help processing: {}", Arrays.toString(line));
 		
 		// TODO: Send (partial) results to the Collector
-		this.collector.tell(new Collector.CollectMessage("If I had results, this would be one."), this.self());
+		//this.collector.tell(new Collector.CollectMessage("If I had results, this would be one."), this.self());
 		
 		// TODO: Fetch further lines from the Reader
 		this.reader.tell(new Reader.ReadMessage(), this.self());
@@ -151,15 +151,13 @@ public class Master extends AbstractLoggingActor {
 	}
 
 	protected void handle(RegistrationMessage message) {
-		// TODO: add poison pill if master ended?
-
 		this.context().watch(this.sender());
 		this.workers.add(this.sender());
 
 
 		this.log().info("Registered {}", this.sender());
 		
-		this.largeMessageProxy.tell(new LargeMessageProxy.LargeMessage<>(this.welcomeData, this.sender()), this.self()); // replaced new Worker.WelcomeMessage(this.welcomeData)
+		this.largeMessageProxy.tell(new LargeMessageProxy.LargeMessage<>(new Worker.WelcomeMessage(this.welcomeData), this.sender()), this.self());
 		
 		// TODO: Assign some work to registering workers. Note that the processing of the global task might have already started.
 	}
