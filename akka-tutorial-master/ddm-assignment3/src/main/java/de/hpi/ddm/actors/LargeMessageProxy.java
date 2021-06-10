@@ -194,7 +194,7 @@ public class LargeMessageProxy extends AbstractLoggingActor {
 
 	//https://doc.akka.io/docs/akka/current/stream/operators/ActorSource/actorRefWithBackpressure.html
 	private void handle(StreamSyncMessage streamSyncMessage) {
-		this.log().info("DEBUG: StreamSyncMessage ");
+		//this.log().info("DEBUG: StreamSyncMessage ");
 		BatchCreator batchCreator = new BatchCreator();
 		Sink sink = Sink.actorRefWithBackpressure(
 				streamSyncMessage.getSenderReference(),

@@ -214,7 +214,7 @@ public class Worker extends AbstractLoggingActor {
 		if (size == 1) {
 			String permutationHash = hash(new String(a));
 			if(this.hint.equals(permutationHash)){
-				//this.log().info("Hint decrypted");
+				this.log().info("		Hint for ID " + this.ID + " decrypted");
 				this.master.tell(new HintSolvedMessage(this.ID, this.hint, new String(a)), this.self());
 				return;
 			}
