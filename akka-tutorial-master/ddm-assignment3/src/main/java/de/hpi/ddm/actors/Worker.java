@@ -184,6 +184,7 @@ public class Worker extends AbstractLoggingActor {
 		if(!this.decryptedPwd.equals("")) {
 			//this.log().info("Password found");
 			this.master.tell(new PasswordDecryptedMessage(this.ID, encrypted, this.decryptedPwd), this.self());
+			this.master.tell(new AvailabilityMessage(), this.self()); //tell master it is free
 			return;
 		}
 		//this.log().info("No password found");
