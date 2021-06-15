@@ -1,0 +1,4 @@
+KNOWN BUGS
+
+- workers sometimes don’t solve for all hints after first password and therefore don’t necessarily crack all passwords
+- output of collector or timing for password cracking task sometimes doesn't appear
