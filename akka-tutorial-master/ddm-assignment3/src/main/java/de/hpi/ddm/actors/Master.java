@@ -185,26 +185,12 @@ public class Master extends AbstractLoggingActor {
 		}
 
 		if(this.pwdDecryptionQueue.isEmpty()){
-			this.sendSolveHintMessage();
+			sendSolveHintMessage();
 		} else {
-			this.sendSolvePasswordMessage();
+			sendSolvePasswordMessage();
 		}
 
-		
-		// TODO: Process the lines with the help of the worker actors
-		//for (String[] line : message.getLines())
-		//	this.log().error("Need help processing: {}", Arrays.toString(line));
-		
-		// TODO: Send (partial) results to the Collector
-		//this.collector.tell(new Collector.CollectMessage("If I had results, this would be one."), this.self());
-
 		this.collector.tell(new Collector.CollectMessage("Processed batch size " + message.getLines().size()), this.self());
-		//this.collector.tell(new Collector.PrintMessage(), this.self());
-
-		// TODO: Fetch further lines from the Reader
-		//this.log().info("DEBUG: Fetching data");
-
-		//this.reader.tell(new Reader.ReadMessage(), this.self());
 		
 	}
 
@@ -238,25 +224,28 @@ public class Master extends AbstractLoggingActor {
 	private void handle(Worker.HintSolvedMessage hintMessage) {
 		int ID = hintMessage.getID();
 		ActorRef messageSender = this.sender();
-		this.log().info("Password hint decrypted from ID: " + ID + " | decrypted hint: " + hintMessage.getDecryptedHint());
+		//this.log().info("Password hint decrypted from ID: " + ID + " | decrypted hint: " + hintMessage.getDecryptedHint());
 		for (int i = 0; i < this.workers.size(); i++) {
 			if(messageSender.equals(this.workers.get(i))){
 				if(this.pwdHashmap.containsKey(ID)){
 					//this.log().info("Added hint to hashmap with key " + ID);
 					this.pwdHashmap.get(ID).addDecrHint(hintMessage.getEncryptedHint(), hintMessage.getDecryptedHint());
 					//this.log().info("Password object: " + this.pwdHashmap.get(ID).toString());
-					//this.log().info("Saved hint for " + this.ID_PasswordHashMap.get(ID).getName() + " with ID: " + this.ID_PasswordHashMap.get(ID).getID() + "\n" + "		Hints Array: " + this.ID_PasswordHashMap.get(ID).getDecryptedPassword().toString());
+					this.log().info("Saved hint for " + this.pwdHashmap.get(ID).getName() + " with ID: " + this.pwdHashmap.get(ID).getID() + "\n" + "		Hints Array: " + Arrays.toString(this.pwdHashmap.get(ID).getDecrHints()));
 					break;
 				}
 				this.occupiedWorkers.set(i, false); //Set available
+				this.log().info(Arrays.toString(occupiedWorkers.toArray()));
 			}
 		}
 
 		//check if all hints from ID are cracked
-		if(this.pwdHashmap.get(ID).checkAllHintsDecrypted()){
+		boolean allDecrypted = this.pwdHashmap.get(ID).checkAllHintsDecrypted();
+		this.log().info("DEBUG: all Hints decrypted: " + allDecrypted);
+		if(allDecrypted == true){
 			Password password = (Password) this.pwdHashmap.get(ID).clone(); //clone the password from hashmap to send to the worker
 			this.pwdDecryptionQueue.add(new SolvePasswordMessage(password));
-			//this.log().info("Password Task for ID added: " + ID + " with Password object: " + this.pwdHashmap.get(ID).toString());
+			this.log().info("Password Task for ID added: " + ID + " with Password object: " + this.pwdHashmap.get(ID).toString());
 			//this.log().info("pwdDecryptionQueue size: " + this.pwdDecryptionQueue.size());
 			sendSolvePasswordMessage();
 		}
@@ -279,6 +268,7 @@ public class Master extends AbstractLoggingActor {
 						this.pwdHashmap.get(id).setDecrPwd(decryptedPassword);
 						this.log().info("Decrypted Password from " + pwdHashmap.get(id).getName() + " with ID " + pwdHashmap.get(id).getID() + ": " + decryptedPassword);
 						this.occupiedWorkers.set(i, false); //Set available
+						this.log().info("Password Decrypted: worker "+i+" available again");
 						//Send solution to the collector
 						this.collector.tell(new Collector.CollectMessage("Decrypted Password from " + pwdHashmap.get(id).getName() + " with ID " + pwdHashmap.get(id).getID() + ": " + decryptedPassword), this.self());
 						this.collector.tell(new Collector.PrintMessage(), this.self());
@@ -290,8 +280,11 @@ public class Master extends AbstractLoggingActor {
 			}
 		}
 
-		sendSolvePasswordMessage();
-		sendSolveHintMessage();
+		if(this.pwdDecryptionQueue.isEmpty()){
+			this.sendSolveHintMessage();
+		} else{
+			sendSolvePasswordMessage();
+		}
 
 		if(pwdDecryptionQueue.isEmpty() && hintDecryptionQueue.isEmpty()){ //Check to see if there are more tasks in queues
 			this.reader.tell(new Reader.ReadMessage(), this.self()); //tell reader to send more batches of passwords
@@ -335,8 +328,11 @@ public class Master extends AbstractLoggingActor {
 		for (int i = 0; i < this.workers.size(); i++) {
 			if(sender.equals(this.workers.get(i))){
 				this.occupiedWorkers.set(i, false); //set to false: available
-				this.sendSolvePasswordMessage();
-				this.sendSolveHintMessage();
+				if(this.pwdDecryptionQueue.isEmpty()){
+					sendSolveHintMessage();
+				} else {
+					sendSolvePasswordMessage();
+				}
 				break;
 			}
 		}

@@ -167,6 +167,7 @@ public class Worker extends AbstractLoggingActor {
 	}
 
 	private void handle(Master.SolvePasswordMessage message) {
+		this.log().info("SolvePasswordMessage @ worker");
 		this.ID = message.getPassword().getID();
 		int pwdLength = message.getPassword().getPwdLength();
 
