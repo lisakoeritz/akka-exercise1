@@ -49,8 +49,8 @@ object Sindy {
     // 6 - create inclusion lists
     val inclusionLists = attrSets
       .select(explode(col("attributes")).as("key"), col("attributes"))
-      .as[(String, Seq[String])]
-      .map(row => (row._1, row._2.filter(_ != row._1)))
+      .as[(String, Seq[String])] //select converts to sql dataframe, we need spark dataset
+      .map(row => (row._1, row._2.filter(_ != row._1))) //filter, retaining all att that ar not
 
     //inclusionLists.show()
 
@@ -60,7 +60,7 @@ object Sindy {
       .agg(collect_set("ind_candidates").as("ind_candidates")).as[(String, Seq[Seq[String]])]
     //aggInclList.show()
 
-    val intersectedInclList = aggInclList.map(row => (row._1, row._2.reduce(_.intersect(_)))) //does this make sense?!
+    val intersectedInclList = aggInclList.map(row => (row._1, row._2.reduce((e1,e2) => e1.intersect(e2)))) //does this make sense?!
     val filteredINDList = intersectedInclList.filter(row => row._2.nonEmpty)
     //filteredINDList.show()
 
@@ -69,7 +69,7 @@ object Sindy {
     val output = filteredINDList.toDF("dependent", "referenced_IND").sort("dependent").as[(String,Seq[String])]
     //output.show()
 
-    output.collect().foreach(row => println(row._1 + " > " + row._2.reduce(_ + " , " + _)))
+    output.collect().foreach(row => println(row._1 + " < " + row._2.reduce( (e1,e2) => e1 + ", " + e2)))
 
 
   }
